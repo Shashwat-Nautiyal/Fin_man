@@ -1,5 +1,6 @@
 const transectionModel = require("../models/transectionModel");
 const moment = require("moment");
+const { checkAndSendWarning } = require("../helpers/expenseHelper");
 const getAllTransection = async (req, res) => {
   try {
     const { frequency, selectedDate, type } = req.body;
@@ -50,9 +51,16 @@ const editTransection = async (req, res) => {
 
 const addTransection = async (req, res) => {
   try {
-    // const newTransection = new transectionModel(req.body);
     const newTransection = new transectionModel(req.body);
     await newTransection.save();
+
+    // Check if it's an expense and trigger warning check
+    if (req.body.type === "expense") {
+      checkAndSendWarning(req.body.userid).catch((err) =>
+        console.error("Warning check failed:", err)
+      );
+    }
+
     res.status(201).send("Transection Created");
   } catch (error) {
     console.log(error);
