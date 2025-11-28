@@ -1,6 +1,12 @@
 const nodemailer = require("nodemailer");
+const sgMail = require("@sendgrid/mail");
 
-// Create email transporter
+// Initialize SendGrid if API key is provided
+if (process.env.SENDGRID_API_KEY) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+}
+
+// Create email transporter for Gmail
 const createTransporter = () => {
   return nodemailer.createTransport({
     service: process.env.EMAIL_SERVICE || "gmail",
@@ -14,15 +20,9 @@ const createTransporter = () => {
 // Send warning email
 const sendWarningEmail = async (userEmail, userName, expenseData) => {
   try {
-    const transporter = createTransporter();
-
     const { currentExpenses, expenseLimit, exceededBy } = expenseData;
 
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: userEmail,
-      subject: "⚠️ Monthly Expense Limit Alert - Finance Tracker",
-      html: `
+    const emailHTML = `
         <!DOCTYPE html>
         <html>
         <head>
@@ -66,12 +66,34 @@ const sendWarningEmail = async (userEmail, userName, expenseData) => {
           </div>
         </body>
         </html>
-      `,
-    };
+      `;
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log("Warning email sent successfully:", info.messageId);
-    return { success: true, messageId: info.messageId };
+    // Use SendGrid if API key is available (for production)
+    if (process.env.SENDGRID_API_KEY) {
+      const msg = {
+        to: userEmail,
+        from: process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER,
+        subject: "⚠️ Monthly Expense Limit Alert - Finance Tracker",
+        html: emailHTML,
+      };
+
+      const result = await sgMail.send(msg);
+      console.log("Warning email sent successfully via SendGrid");
+      return { success: true, messageId: result[0].headers["x-message-id"] };
+    } else {
+      // Fallback to Gmail/SMTP (for local development)
+      const transporter = createTransporter();
+      const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: userEmail,
+        subject: "⚠️ Monthly Expense Limit Alert - Finance Tracker",
+        html: emailHTML,
+      };
+
+      const info = await transporter.sendMail(mailOptions);
+      console.log("Warning email sent successfully via Gmail");
+      return { success: true, messageId: info.messageId };
+    }
   } catch (error) {
     console.error("Error sending warning email:", error);
     return { success: false, error: error.message };
